@@ -324,13 +324,6 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                                     Connect Wallet
                                 </button>
                             )}
-                            <Link
-                                href="#"
-                                className="block w-full text-center py-4 rounded-2xl bg-white/5 border border-white/10 text-white/40 font-black text-[10px] uppercase tracking-[0.3em]"
-                                onClick={() => setIsOpen(false)}
-                            >
-                                Launch Terminal v1.0
-                            </Link>
                         </div>
                     </motion.div>
                 )}
