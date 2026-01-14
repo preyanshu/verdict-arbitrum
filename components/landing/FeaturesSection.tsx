@@ -1,5 +1,6 @@
 "use client";
 
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
@@ -25,9 +26,11 @@ export const FeaturesSection = () => (
                     Verdict bridges real-world assets with market-driven AI strategy selection.
                 </p>
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-fit">
-                    <Button className="bg-secondary hover:bg-secondary/80 text-white h-14 px-8 rounded-2xl text-base font-semibold transition-colors flex items-center gap-2 border border-white/5 shadow-lg shadow-emerald-900/10">
-                        Launch a Proposal <ArrowRight className="w-5 h-5 ml-1" />
-                    </Button>
+                    <Link href="/dashboard">
+                        <Button className="bg-secondary hover:bg-secondary/80 text-white h-14 px-8 rounded-2xl text-base font-semibold transition-colors flex items-center gap-2 border border-white/5 shadow-lg shadow-emerald-900/10">
+                            Launch a Proposal <ArrowRight className="w-5 h-5 ml-1" />
+                        </Button>
+                    </Link>
                 </motion.div>
             </div>
         </motion.div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Play, Minus, X as XIcon } from "lucide-react";
@@ -89,10 +90,12 @@ export const Hero = () => (
                     transition={{ delay: 0.8 }}
                     className="pt-4"
                 >
-                    <Button size="lg" className="group relative rounded-full font-bold text-black overflow-hidden shadow-[0_0_30px_var(--emerald-glow)] text-lg h-14 px-10 bg-gradient-to-r from-emerald-400 to-green-500 hover:from-emerald-300 hover:to-green-400 border-none transition-all hover:scale-105 active:scale-95">
-                        Explore Markets
-                        <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                    </Button>
+                    <Link href="/dashboard">
+                        <Button size="lg" className="group relative rounded-full font-bold text-black overflow-hidden shadow-[0_0_30px_var(--emerald-glow)] text-lg h-14 px-10 bg-gradient-to-r from-emerald-400 to-green-500 hover:from-emerald-300 hover:to-green-400 border-none transition-all hover:scale-105 active:scale-95">
+                            Explore Markets
+                            <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                        </Button>
+                    </Link>
                 </motion.div>
             </div>
 
