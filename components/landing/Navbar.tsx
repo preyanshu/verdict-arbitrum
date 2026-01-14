@@ -18,7 +18,25 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
     const [isAccountOpen, setIsAccountOpen] = useState(false);
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const pathname = usePathname();
+    const isLandingPage = pathname === '/';
     const { login, logout, authenticated, user } = usePrivy();
+
+    const landingLinks = [
+        { name: 'Vision', href: '#hero' },
+        { name: 'Features', href: '#features' },
+        { name: 'Performance', href: '#stats' },
+        { name: 'Docs', href: '#' }
+    ];
+
+    const dashboardLinks = [
+        { name: 'Home', href: '/dashboard' },
+        { name: 'Agents', href: '/dashboard/agents' },
+        { name: 'Sources', href: '/dashboard/sources' },
+        { name: 'History', href: '/dashboard/history' },
+        { name: 'Docs', href: '#' }
+    ];
+
+    const currentLinks = isLandingPage ? landingLinks : dashboardLinks;
 
     useEffect(() => {
         if (user) {
@@ -49,17 +67,12 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                 className={`fixed top-0 left-0 right-0 flex items-center justify-between px-4 lg:px-8 py-4 lg:py-5 mx-auto w-full z-[100] ${!isOpen ? `${transparent ? 'lg:bg-transparent lg:backdrop-blur-none lg:border-none' : ''} border-b border-white/5 bg-black/80 backdrop-blur-2xl` : 'border-b border-white/10'}`}
             >
                 <div className="max-w-7xl mx-auto w-full flex items-center justify-between relative z-[110]">
-                    <Logo />
+                    <Link href="/">
+                        <Logo />
+                    </Link>
 
-                    {/* Desktop Links */}
                     <div className="hidden lg:flex items-center gap-1 bg-white/5 backdrop-blur-md px-1 py-1 rounded-full border border-white/10" onMouseLeave={() => setHoveredIndex(null)}>
-                        {[
-                            { name: 'Home', href: '/dashboard' },
-                            { name: 'Agents', href: '/dashboard/agents' },
-                            { name: 'Sources', href: '/dashboard/sources' },
-                            { name: 'History', href: '/dashboard/history' },
-                            { name: 'Docs', href: '#' }
-                        ].map((item, i) => {
+                        {currentLinks.map((item, i) => {
                             const isActive = pathname === item.href;
                             return (
                                 <Link
@@ -95,9 +108,18 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                         })}
                     </div>
 
-                    {/* Desktop Wallet Connect */}
+                    {/* Desktop Action Button */}
                     <div className="hidden lg:flex items-center gap-3 relative">
-                        {authenticated ? (
+                        {isLandingPage ? (
+                            <Link href="/dashboard">
+                                <button
+                                    className="group relative flex items-center gap-3 px-6 py-2.5 rounded-2xl bg-white text-black font-black text-[11px] uppercase tracking-[0.2em] hover:bg-emerald-400 hover:text-black transition-all hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                                >
+                                    Launch App
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </Link>
+                        ) : authenticated ? (
                             <div
                                 className="relative"
                                 onMouseEnter={() => setIsAccountOpen(true)}
@@ -209,9 +231,17 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                         )}
                     </div>
 
-                    {/* Mobile Identity/Connect Action */}
+                    {/* Mobile Identity/Action */}
                     <div className="flex lg:hidden items-center gap-2">
-                        {authenticated ? (
+                        {isLandingPage ? (
+                            <Link href="/dashboard">
+                                <button
+                                    className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-black shadow-[0_0_15px_rgba(255,255,255,0.2)] transition-transform active:scale-90"
+                                >
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
+                            </Link>
+                        ) : authenticated ? (
                             <button
                                 onClick={() => setIsAccountOpen(true)}
                                 className={`w-10 h-10 rounded-full border flex items-center justify-center overflow-hidden transition-all ${isAccountOpen ? 'bg-emerald-500/20 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : 'bg-emerald-500/10 border-emerald-500/20'}`}
@@ -262,13 +292,7 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                         exit={{ opacity: 0, y: -20 }}
                         className="fixed top-[72px] lg:top-[84px] left-0 right-0 bg-[#08080c]/98 backdrop-blur-3xl border-b border-white/10 p-6 flex flex-col gap-4 lg:hidden z-[150]"
                     >
-                        {[
-                            { name: 'Home', href: '/dashboard' },
-                            { name: 'Agents', href: '/dashboard/agents' },
-                            { name: 'Sources', href: '/dashboard/sources' },
-                            { name: 'History', href: '/dashboard/history' },
-                            { name: 'Docs', href: '#' }
-                        ].map((item) => {
+                        {currentLinks.map((item) => {
                             const isActive = pathname === item.href;
                             return (
                                 <Link
@@ -282,7 +306,16 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                             );
                         })}
                         <div className="w-full mt-4 space-y-4">
-                            {!authenticated && (
+                            {isLandingPage ? (
+                                <Link href="/dashboard" onClick={() => setIsOpen(false)}>
+                                    <button
+                                        className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-white text-black font-black text-sm uppercase tracking-[0.2em] shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                                    >
+                                        Launch App
+                                        <ChevronRight className="w-5 h-5" />
+                                    </button>
+                                </Link>
+                            ) : !authenticated && (
                                 <button
                                     onClick={() => { login(); setIsOpen(false); }}
                                     className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-emerald-500 text-black font-black text-sm uppercase tracking-[0.2em] shadow-[0_0_30px_rgba(16,185,129,0.2)]"

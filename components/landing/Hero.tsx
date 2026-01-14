@@ -6,7 +6,7 @@ import { ArrowRight, Play, Minus, X as XIcon } from "lucide-react";
 import { FloatingTokens } from "./FloatingTokens";
 
 export const Hero = () => (
-    <section className="relative pt-24 pb-16 px-6 w-full min-h-screen flex flex-col overflow-hidden">
+    <section id="hero" className="relative pt-24 pb-16 px-6 w-full min-h-screen flex flex-col overflow-hidden">
 
         {/* --- Falling Green/Cyan Spotlight Beam Effect - Desktop Only --- */}
         <motion.div
@@ -57,7 +57,9 @@ export const Hero = () => (
                 >
                     <div className="flex items-center justify-center lg:justify-start gap-2 mb-6">
                         <span className="text-primary font-bold tracking-tighter text-lg">{'///'}</span>
-                        <span className="text-primary/90 font-medium tracking-wide text-xs md:text-sm uppercase tracking-widest">Powered by Quantum Markets</span>
+                        <span className="text-white font-medium tracking-wide text-xs md:text-sm uppercase tracking-widest">
+                            Powered by Quantum Markets
+                        </span>
                     </div>
                 </motion.div>
                 <motion.h1
