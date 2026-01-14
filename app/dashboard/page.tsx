@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { Navbar } from "@/components/landing/Navbar";
 import { ActiveAgents } from "@/components/dashboard/ActiveAgents";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
-import { SlidersHorizontal, Search, LayoutGrid, ChevronDown, Activity, ChevronRight } from "lucide-react";
+import { SlidersHorizontal, Search, LayoutGrid, ChevronDown, Activity, ChevronRight, Plus } from "lucide-react";
 import { MarketStatus } from "@/components/dashboard/MarketStatus";
 import { MarketCard } from "@/components/dashboard/MarketCard";
 import { MarketState, Agent, MarketStrategy } from "@/lib/types";
 import { MarketDetailView } from "@/components/dashboard/MarketDetailView";
+import { CreateProposalModal } from "@/components/dashboard/CreateProposalModal";
 import { AnimatePresence, motion } from "framer-motion";
 
 
@@ -19,6 +20,7 @@ export default function DashboardPage() {
     const [now, setNow] = useState(Date.now());
     const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
     // Dynamic sidebar width based on screen size
     const [sidebarWidth, setSidebarWidth] = useState(450);
@@ -611,6 +613,15 @@ export default function DashboardPage() {
                                         </h1>
                                         <p className="text-white/40 font-medium text-[10px] sm:text-sm md:text-lg uppercase tracking-widest truncate">Autonomous Strategic Evaluation</p>
                                     </div>
+                                    <div className="flex items-center gap-4">
+                                        <button
+                                            onClick={() => setIsCreateModalOpen(true)}
+                                            className="group flex items-center gap-3 px-6 py-3 rounded-2xl bg-white text-black font-black text-[11px] uppercase tracking-[0.2em] hover:bg-emerald-400 hover:text-black transition-all hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                                        >
+                                            <Plus className="w-4 h-4 text-emerald-600" />
+                                            Launch Proposal
+                                        </button>
+                                    </div>
                                 </header>
 
                                 {/* Header Controls */}
@@ -668,6 +679,12 @@ export default function DashboardPage() {
                     </AnimatePresence>
                 </main>
             </div>
+            <CreateProposalModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                activeAgentsCount={agents.length}
+                currentProposalsCount={strategies.length}
+            />
         </div>
     );
 }
