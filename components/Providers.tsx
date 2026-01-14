@@ -1,6 +1,7 @@
 "use client";
 
 import { PrivyProvider } from '@privy-io/react-auth';
+import { quantumEVM } from '@/lib/blockchain';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
     return (
@@ -13,6 +14,8 @@ export default function Providers({ children }: { children: React.ReactNode }) {
                     accentColor: '#10b981', // emerald-500
                     showWalletLoginFirst: false,
                 },
+                supportedChains: [quantumEVM],
+                defaultChain: quantumEVM,
                 embeddedWallets: {
                     ethereum: {
                         createOnLogin: 'users-without-wallets',

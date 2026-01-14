@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MarketStrategy } from "@/lib/types";
 import { Activity, ArrowUpRight, ChevronDown, ChevronUp, Database } from "lucide-react";
 import { TRUSTED_DATA_SOURCES } from "@/lib/data-sources";
+import { AnimatePresence, motion } from "framer-motion";
 
 interface MarketCardProps {
     strategy: MarketStrategy;
@@ -21,7 +22,7 @@ export function MarketCard({ strategy, onClick }: MarketCardProps) {
     const noPrice = getLatestPrice(strategy.noToken);
 
     // Get primary asset icon
-    const primaryDataSource = TRUSTED_DATA_SOURCES.find(t => t.id === strategy.usedDataSources[0]?.id);
+    const primaryDataSource = TRUSTED_DATA_SOURCES.find(t => t.id === strategy.usedDataSources?.[0]?.id);
 
     return (
         <div
@@ -98,45 +99,55 @@ export function MarketCard({ strategy, onClick }: MarketCardProps) {
             </button>
 
             {/* Advanced Content */}
-            {isExpanded && (
-                <div className="mt-6 space-y-8 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="pl-1">
-                        <p className="text-sm leading-relaxed text-white/80 font-medium italic border-l-2 border-white/20 pl-5 bg-white/[0.02] py-4 rounded-r-xl">
-                            "{strategy.description}"
-                        </p>
-                    </div>
+            <AnimatePresence>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                    >
+                        <div className="mt-6 space-y-8 pt-2">
+                            <div className="pl-1">
+                                <p className="text-sm leading-relaxed text-white/80 font-medium italic border-l-2 border-white/20 pl-5 bg-white/[0.02] py-4 rounded-r-xl">
+                                    "{strategy.description}"
+                                </p>
+                            </div>
 
-                    <div className="flex flex-col gap-6 border-t border-white/10 pt-8">
-                        <div className="flex flex-wrap gap-6">
-                            {strategy.usedDataSources.map((ds, i) => {
-                                const detailedInfo = TRUSTED_DATA_SOURCES.find(t => t.id === ds.id);
-                                return (
-                                    <div key={i} className="flex items-center gap-4 group/ds">
-                                        <div className="w-10 h-10 rounded-full bg-white/[0.06] border border-white/10 flex items-center justify-center p-2 overflow-hidden transition-colors group-hover/ds:border-white/20 shrink-0">
-                                            {detailedInfo?.icon ? (
-                                                <img src={detailedInfo.icon} alt={detailedInfo.name} className="w-full h-full object-contain filter grayscale group-hover/ds:grayscale-0 transition-all" />
-                                            ) : (
-                                                <Database className="w-5 h-5 text-white/40" />
-                                            )}
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] text-white/80 uppercase font-bold tracking-widest leading-none">
-                                                {detailedInfo?.ticker || `ID ${ds.id}`}
-                                            </span>
-                                            <span className="text-sm text-white font-mono font-bold tracking-tighter mt-1">
-                                                {ds.currentValue.toFixed(2)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            <div className="flex flex-col gap-6 border-t border-white/10 pt-8">
+                                <div className="flex flex-wrap gap-6">
+                                    {strategy.usedDataSources?.map((ds, i) => {
+                                        const detailedInfo = TRUSTED_DATA_SOURCES.find(t => t.id === ds.id);
+                                        return (
+                                            <div key={i} className="flex items-center gap-4 group/ds">
+                                                <div className="w-10 h-10 rounded-full bg-white/[0.06] border border-white/10 flex items-center justify-center p-2 overflow-hidden transition-colors group-hover/ds:border-white/20 shrink-0">
+                                                    {detailedInfo?.icon ? (
+                                                        <img src={detailedInfo.icon} alt={detailedInfo.name} className="w-full h-full object-contain filter grayscale group-hover/ds:grayscale-0 transition-all" />
+                                                    ) : (
+                                                        <Database className="w-5 h-5 text-white/40" />
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] text-white/80 uppercase font-bold tracking-widest leading-none">
+                                                        {detailedInfo?.ticker || `ID ${ds.id}`}
+                                                    </span>
+                                                    <span className="text-sm text-white font-mono font-bold tracking-tighter mt-1">
+                                                        {ds.currentValue.toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="text-[11px] text-white/60 font-mono uppercase tracking-[0.3em] font-bold text-center w-full py-2 bg-white/5 rounded border border-white/5">
+                                    Verified Oracle Resolution
+                                </div>
+                            </div>
                         </div>
-                        <div className="text-[11px] text-white/60 font-mono uppercase tracking-[0.3em] font-bold text-center w-full py-2 bg-white/5 rounded border border-white/5">
-                            Verified Oracle Resolution
-                        </div>
-                    </div>
-                </div>
-            )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

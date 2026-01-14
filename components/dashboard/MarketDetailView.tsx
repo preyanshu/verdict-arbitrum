@@ -14,36 +14,52 @@ import {
     Activity,
     Clock,
     TrendingDown,
-    ArrowUpDown
+    ArrowUpDown,
+    Wallet
 } from "lucide-react";
 import { TRUSTED_DATA_SOURCES } from "@/lib/data-sources";
 import { motion, AnimatePresence } from "framer-motion";
 import { createChart, ColorType, AreaSeries, LineSeries, UTCTimestamp, ISeriesApi } from "lightweight-charts";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { getVUSDCBalance, getYESBalance, getVUSDCTokenAddress, getYesTokenAddress, getSwapQuote, executeSwap, quantumEVM, getAllowance, approveToken, ROUTER_ADDRESS, publicClient } from "@/lib/blockchain";
+import { createWalletClient, custom, parseUnits } from "viem";
+import { Loader2 } from "lucide-react";
 
 interface MarketDetailViewProps {
     strategy: MarketStrategy;
     onBack: () => void;
+    isMarketActive?: boolean;
+    onTradeSuccess?: (trade: any) => void;
 }
 
-export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
+export function MarketDetailView({ strategy, onBack, isMarketActive = false, onTradeSuccess }: MarketDetailViewProps) {
     const [activeTab, setActiveTab] = useState<'yes' | 'no'>('yes');
     const [swapAmount, setSwapAmount] = useState<string>("");
     const [isReversed, setIsReversed] = useState(false);
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<any>(null);
+    const areaSeriesRef = useRef<any>(null);
+    const twapSeriesRef = useRef<any>(null);
+    const { user, authenticated, login } = usePrivy();
+    const { wallets } = useWallets();
+
+    const [vusdcAddress, setVusdcAddress] = useState<string>("");
+    const [yesTokenAddress, setYesTokenAddressState] = useState<string>("");
+    const [vusdcBalance, setVusdcBalance] = useState<string>("0.00");
+    const [yesBalance, setYesBalance] = useState<string>("0.00");
+    const [quoteAmount, setQuoteAmount] = useState<string>("0.00");
+    const [isQuoting, setIsQuoting] = useState(false);
+    const [isExecuting, setIsExecuting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const quoteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const currentToken = activeTab === 'yes' ? strategy.yesToken : strategy.noToken;
     const yesPrice = strategy.yesToken.history[strategy.yesToken.history.length - 1]?.price ?? 0.5;
     const noPrice = strategy.noToken.history[strategy.noToken.history.length - 1]?.price ?? 0.5;
 
+    // Initial Chart Creation
     useEffect(() => {
         if (!chartContainerRef.current) return;
-
-        const handleResize = () => {
-            if (chartRef.current) {
-                chartRef.current.applyOptions({ width: chartContainerRef.current?.clientWidth });
-            }
-        };
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
@@ -59,6 +75,13 @@ export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
             timeScale: {
                 borderVisible: false,
                 timeVisible: true,
+                tickMarkFormatter: (time: number) => {
+                    const startSeconds = Math.floor(strategy.timestamp / 1000);
+                    const relativeSeconds = Math.max(0, time - startSeconds);
+                    const mins = Math.floor(relativeSeconds / 60);
+                    const secs = relativeSeconds % 60;
+                    return `${mins}m ${secs}s`;
+                },
             },
             rightPriceScale: {
                 borderVisible: false,
@@ -88,29 +111,214 @@ export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
             },
         });
 
-        const data = currentToken.history.map(h => ({
-            time: (h.timestamp / 1000) as UTCTimestamp,
-            value: h.price,
-        }));
-
-        const twapData = currentToken.twapHistory.map(h => ({
-            time: (h.timestamp / 1000) as UTCTimestamp,
-            value: h.twap,
-        }));
-
-        areaSeries.setData(data);
-        twapSeries.setData(twapData);
-
-        chart.timeScale().fitContent();
         chartRef.current = chart;
+        areaSeriesRef.current = areaSeries;
+        twapSeriesRef.current = twapSeries;
+
+        const handleResize = () => {
+            if (chartRef.current && chartContainerRef.current) {
+                chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+            }
+        };
 
         window.addEventListener('resize', handleResize);
 
         return () => {
             window.removeEventListener('resize', handleResize);
             chart.remove();
+            chartRef.current = null;
         };
-    }, [activeTab, strategy.id]);
+    }, []); // Create chart once
+
+    // Reactive Data Updates
+    useEffect(() => {
+        if (!chartRef.current || !areaSeriesRef.current || !twapSeriesRef.current) return;
+
+        // Update colors based on tab
+        areaSeriesRef.current.applyOptions({
+            lineColor: activeTab === 'yes' ? '#10b981' : '#ef4444',
+            topColor: activeTab === 'yes' ? '#10b98120' : '#ef444420',
+            bottomColor: activeTab === 'yes' ? '#10b98105' : '#ef444405',
+        });
+
+        // Use absolute seconds for data points but sort/filter to ensure strictly increasing
+        const data = currentToken.history
+            .map(h => ({
+                time: Math.floor(h.timestamp / 1000) as UTCTimestamp,
+                value: h.price,
+            }))
+            .sort((a, b) => (a.time as number) - (b.time as number))
+            .filter((item, index, self) => index === 0 || item.time > self[index - 1].time);
+
+        const twapData = (currentToken.twapHistory || [])
+            .map(h => ({
+                time: Math.floor(h.timestamp / 1000) as UTCTimestamp,
+                value: h.twap,
+            }))
+            .sort((a, b) => (a.time as number) - (b.time as number))
+            .filter((item, index, self) => index === 0 || item.time > self[index - 1].time);
+
+        areaSeriesRef.current.setData(data);
+        twapSeriesRef.current.setData(twapData);
+
+        chartRef.current.timeScale().fitContent();
+    }, [strategy, activeTab]);
+
+    // Fetch Token Addresses and Balances
+    useEffect(() => {
+        const fetchAddresses = async () => {
+            try {
+                const [vAddr, yAddr] = await Promise.all([
+                    getVUSDCTokenAddress(),
+                    getYesTokenAddress(strategy.id)
+                ]);
+                setVusdcAddress(vAddr);
+                setYesTokenAddressState(yAddr);
+            } catch (error) {
+                console.error("Failed to fetch token addresses:", error);
+            }
+        };
+        fetchAddresses();
+    }, [strategy.id]);
+
+    const updateBalances = async () => {
+        if (!user?.wallet?.address) return;
+        try {
+            const [vBal, yBal] = await Promise.all([
+                getVUSDCBalance(user.wallet.address),
+                getYESBalance(strategy.id, user.wallet.address)
+            ]);
+            setVusdcBalance(vBal);
+            setYesBalance(yBal);
+        } catch (error) {
+            console.error("Failed to fetch balances:", error);
+        }
+    };
+
+    useEffect(() => {
+        updateBalances();
+        const interval = setInterval(updateBalances, 5000);
+        return () => clearInterval(interval);
+    }, [user?.wallet?.address, strategy.id]);
+
+    // Real-time Quoting
+    useEffect(() => {
+        if (!swapAmount || isNaN(Number(swapAmount)) || Number(swapAmount) <= 0) {
+            setQuoteAmount("0.00");
+            return;
+        }
+
+        if (quoteTimeoutRef.current) clearTimeout(quoteTimeoutRef.current);
+
+        quoteTimeoutRef.current = setTimeout(async () => {
+            setIsQuoting(true);
+            try {
+                const tokenIn = isReversed ? yesTokenAddress : vusdcAddress;
+                if (!tokenIn) return;
+                const quote = await getSwapQuote(strategy.id, tokenIn, swapAmount);
+                setQuoteAmount(quote);
+            } finally {
+                setIsQuoting(false);
+            }
+        }, 500);
+
+        return () => {
+            if (quoteTimeoutRef.current) clearTimeout(quoteTimeoutRef.current);
+        };
+    }, [swapAmount, isReversed, vusdcAddress, yesTokenAddress, strategy.id]);
+
+    const validateSwap = () => {
+        if (!swapAmount || isNaN(Number(swapAmount)) || Number(swapAmount) <= 0) return null;
+        const amount = Number(swapAmount);
+        const balance = isReversed ? Number(yesBalance) : Number(vusdcBalance);
+        if (amount > balance) return `Insufficient ${isReversed ? 'YES' : 'vUSD'} balance`;
+        return null;
+    };
+
+    const handleSwap = async () => {
+        const vError = validateSwap();
+        if (vError) {
+            setError(vError);
+            return;
+        }
+        setError(null);
+        if (!wallets[0] || !authenticated) return;
+        setIsExecuting(true);
+        try {
+            // Ensure we are on the correct chain
+            if (wallets[0].chainId !== `eip155:${quantumEVM.id}`) {
+                await wallets[0].switchChain(quantumEVM.id);
+            }
+
+            const provider = await wallets[0].getEthereumProvider();
+            const walletClient = createWalletClient({
+                account: wallets[0].address as `0x${string}`,
+                chain: quantumEVM,
+                transport: custom(provider)
+            });
+
+            const tokenIn = isReversed ? yesTokenAddress : vusdcAddress;
+
+            if (!tokenIn) {
+                setError("Token addresses not loaded. Please try again.");
+                setIsExecuting(false);
+                return;
+            }
+
+            if (!quoteAmount || Number(quoteAmount) <= 0) {
+                setError("Price impact too high or liquidity insufficient.");
+                setIsExecuting(false);
+                return;
+            }
+
+            console.log(`Executing Swap: ${isReversed ? 'YES->vUSD' : 'vUSD->YES'}`, {
+                proposalId: strategy.id,
+                tokenIn,
+                amountIn: swapAmount,
+                expectedOut: quoteAmount
+            });
+
+            const amountInWei = parseUnits(swapAmount, 18);
+
+            // Check and handle allowance
+            const currentAllowance = await getAllowance(tokenIn, wallets[0].address, ROUTER_ADDRESS);
+
+            if (currentAllowance < amountInWei) {
+                setError("Approving token for trade...");
+                const approveHash = await approveToken(walletClient, tokenIn, ROUTER_ADDRESS);
+                await publicClient.waitForTransactionReceipt({ hash: approveHash });
+            }
+
+            setError("Executing transaction...");
+
+            // Min Out calculation: 0.5% slippage
+            const minOut = (Number(quoteAmount) * 0.995).toString();
+
+            await executeSwap(walletClient, strategy.id, tokenIn, swapAmount, minOut);
+
+            // Push trade to UI
+            if (onTradeSuccess) {
+                onTradeSuccess({
+                    type: isReversed ? 'sell' : 'buy',
+                    strategyId: strategy.id,
+                    tokenType: 'yes',
+                    price: yesPrice,
+                    quantity: isReversed ? Number(swapAmount) : Number(quoteAmount),
+                    timestamp: Date.now(),
+                    reasoning: `Manual execution via Protocol Interface.`
+                });
+            }
+
+            setSwapAmount("");
+            setError(null);
+            await updateBalances();
+        } catch (err: any) {
+            console.error("Swap failed:", err);
+            setError(err.message || "Execution failed. Check your wallet.");
+        } finally {
+            setIsExecuting(false);
+        }
+    };
 
     return (
         <motion.div
@@ -132,9 +340,9 @@ export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
                     <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 text-center sm:text-left">
                         <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
-                            {TRUSTED_DATA_SOURCES.find(t => t.id === strategy.usedDataSources[0]?.id)?.icon ? (
+                            {TRUSTED_DATA_SOURCES.find(t => t.id === strategy.usedDataSources?.[0]?.id)?.icon ? (
                                 <img
-                                    src={TRUSTED_DATA_SOURCES.find(t => t.id === strategy.usedDataSources[0]?.id)?.icon}
+                                    src={TRUSTED_DATA_SOURCES.find(t => t.id === strategy.usedDataSources?.[0]?.id)?.icon}
                                     className="w-10 h-10 sm:w-12 sm:h-12 object-contain"
                                     alt="Asset"
                                 />
@@ -203,7 +411,7 @@ export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 mt-8 border-t border-white/5 pt-8">
                             <div>
                                 <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mb-2">24h Volume</p>
-                                <p className="text-base font-bold text-white">${currentToken.volume.toLocaleString()}</p>
+                                <p className="text-base font-bold text-white">${(currentToken.volume || 0).toLocaleString()}</p>
                             </div>
                             <div>
                                 <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mb-2">TWAP (60m)</p>
@@ -211,7 +419,7 @@ export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
                             </div>
                             <div>
                                 <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mb-2">Pool Liquidity</p>
-                                <p className="text-base font-bold text-white">{currentToken.tokenReserve.toFixed(0)} Tokens</p>
+                                <p className="text-base font-bold text-white">{(currentToken.tokenReserve || 0).toFixed(0)} Tokens</p>
                             </div>
                         </div>
                     </div>
@@ -235,7 +443,7 @@ export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
                                     <h3 className="text-lg font-bold text-white">Oracle Data Sources</h3>
                                 </div>
                                 <div className="space-y-4">
-                                    {strategy.usedDataSources.map((ds, i) => {
+                                    {(strategy.usedDataSources || []).map((ds, i) => {
                                         const info = TRUSTED_DATA_SOURCES.find(t => t.id === ds.id);
                                         return (
                                             <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5">
@@ -298,7 +506,7 @@ export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
                                             {isReversed ? "You Sell" : "You Pay"}
                                         </span>
                                         <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">
-                                            {isReversed ? "Balance: 0.00 YES" : "Balance: 1,024.50 vUSD"}
+                                            {isReversed ? `Balance: ${Number(yesBalance).toLocaleString()} YES` : `Balance: ${Number(vusdcBalance).toLocaleString()} vUSD`}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-4 min-w-0">
@@ -339,12 +547,12 @@ export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-4 min-w-0">
-                                        <div className="text-xl sm:text-2xl font-bold text-white/90 flex-1 truncate min-w-0">
-                                            {swapAmount ? (
-                                                isReversed
-                                                    ? (Number(swapAmount) * yesPrice).toFixed(2)
-                                                    : (Number(swapAmount) / yesPrice).toFixed(2)
-                                            ) : "0.00"}
+                                        <div className="text-xl sm:text-2xl font-bold text-white/90 flex-1 truncate min-w-0 flex items-center gap-2">
+                                            {isQuoting ? (
+                                                <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+                                            ) : (
+                                                quoteAmount || "0.00"
+                                            )}
                                         </div>
                                         <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 font-bold uppercase text-[10px] shrink-0 ${isReversed ? 'bg-white/10 border-white/20 text-white/60' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>
                                             {isReversed ? 'vUSD' : 'YES Token'}
@@ -364,9 +572,50 @@ export function MarketDetailView({ strategy, onBack }: MarketDetailViewProps) {
                                 </div>
                             </div>
 
-                            <button className="w-full py-5 rounded-2xl text-sm font-black uppercase tracking-[0.2em] transition-all shadow-xl hover:-translate-y-1 active:scale-95 bg-emerald-500 text-white hover:bg-emerald-400">
-                                {isReversed ? "Close Position" : "Execute Order"}
+                            <button
+                                onClick={() => {
+                                    if (!authenticated) {
+                                        login();
+                                        return;
+                                    }
+                                    handleSwap();
+                                }}
+                                disabled={authenticated && (isExecuting || !swapAmount || Number(swapAmount) <= 0 || isQuoting || !isMarketActive)}
+                                className={`w-full py-5 rounded-2xl text-sm font-black uppercase tracking-[0.2em] transition-all shadow-xl hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:translate-y-0 disabled:active:scale-100 ${!authenticated
+                                    ? "bg-white text-black hover:bg-white/90"
+                                    : "bg-emerald-500 text-white hover:bg-emerald-400"
+                                    }`}
+                            >
+                                {!authenticated ? (
+                                    <>
+                                        <Wallet className="w-4 h-4" />
+                                        Connect Wallet
+                                    </>
+                                ) : isExecuting ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Processing Swap...
+                                    </>
+                                ) : !isMarketActive ? (
+                                    <>
+                                        <Shield className="w-4 h-4" />
+                                        Market Inactive
+                                    </>
+                                ) : isReversed ? "Close Position" : "Execute Order"}
                             </button>
+
+                            <AnimatePresence>
+                                {error && (
+                                    <motion.p
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="text-[10px] font-bold text-red-500 bg-red-500/10 border border-red-500/20 p-3 rounded-xl text-center"
+                                    >
+                                        {error}
+                                    </motion.p>
+                                )}
+                            </AnimatePresence>
                         </div>
                     </div>
 

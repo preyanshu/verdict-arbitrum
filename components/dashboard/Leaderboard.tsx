@@ -10,9 +10,7 @@ interface LeaderboardProps {
 
 export function Leaderboard({ agents }: LeaderboardProps) {
     // Sort agents by vUSD balance or total value if available
-    const sortedAgents = [...agents].sort((a, b) =>
-        (b.totalValue || b.vUSD) - (a.totalValue || a.vUSD)
-    );
+    const sortedAgents = [...agents].sort((a, b) => b.vUSD - a.vUSD);
 
     return (
         <div className="flex flex-col py-6">
@@ -52,7 +50,7 @@ export function Leaderboard({ agents }: LeaderboardProps) {
                                 {Math.round(agent.vUSD)} <span className="text-[10px] text-white/40">vUSD</span>
                             </div>
                             <div className="text-[10px] text-white/30 tabular-nums uppercase tracking-tighter">
-                                {agent.strategy.replace('-', ' ')}
+                                {agent.personality.riskTolerance} • {agent.personality.traits[0]}
                             </div>
                         </div>
                     </motion.div>

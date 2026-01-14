@@ -1,34 +1,29 @@
 export interface MarketStrategy {
     id: string;
     name: string;
-    description: string; // Strategy definition (e.g., "S&P 500 exceeds $700")
-    evaluationLogic: string; // Clear human-readable logic for frontend display
-    mathematicalLogic: string; // Exact mathematical formula (e.g., "price > 700")
-    usedDataSources: Array<{
+    description: string;
+    evaluationLogic: string;
+    mathematicalLogic?: string;
+    usedDataSources?: Array<{
         id: number;
         currentValue: number;
         targetValue: number;
         operator?: string;
     }>;
-    resolutionDeadline: number; // Timestamp when the strategy should be verified
-    // Shared liquidity pool: YES tokens * NO tokens = k (constant product)
-    yesToken: {
-        tokenReserve: number; // YES tokens in the pool
-        volume: number;
-        history: Array<{ price: number; timestamp: number }>;
-        twap: number; // Time-Weighted Average Price
-        twapHistory: Array<{ twap: number; timestamp: number }>;
-    };
-    noToken: {
-        tokenReserve: number; // NO tokens in the pool
-        volume: number;
-        history: Array<{ price: number; timestamp: number }>;
-        twap: number; // Time-Weighted Average Price
-        twapHistory: Array<{ twap: number; timestamp: number }>;
-    };
+    resolutionDeadline: number;
+    yesToken: TokenInfo;
+    noToken: TokenInfo;
     timestamp: number;
     resolved: boolean;
     winner: 'yes' | 'no' | null;
+}
+
+export interface TokenInfo {
+    tokenReserve?: number;
+    volume?: number;
+    history: Array<{ price: number; timestamp: number }>;
+    twap: number;
+    twapHistory?: Array<{ twap: number; timestamp: number }>;
 }
 
 // Market state with multiple strategies
@@ -74,9 +69,12 @@ export interface AgentRoundMemory {
 export interface Agent {
     id: string;
     personality: AgentPersonality;
-    strategy: StrategyType;
-    vUSD: number; // Balance (starts at 100)
+    vUSD: number;
     tokenHoldings: AgentTokenHoldings[];
+    wallet: {
+        address: string;
+        derivationPath: string;
+    };
     trades: Array<{
         type: 'buy' | 'sell';
         strategyId: string;
@@ -85,9 +83,15 @@ export interface Agent {
         quantity: number;
         timestamp: number;
         reasoning?: string;
+        txHash?: string;
     }>;
-    roundMemory: AgentRoundMemory[];
-    totalValue?: number; // Calculated on server
+}
+
+export interface LogEntry {
+    timestamp: string;
+    source: 'System' | 'Market' | 'Trading' | 'Agents' | 'LLM';
+    level: 'info' | 'warn' | 'error' | 'debug';
+    message: string;
 }
 
 export interface TradeDecision {

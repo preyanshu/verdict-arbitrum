@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowLeft, ArrowRight, Loader2, Plus, Check, Info, Brain } from 'lucide-react';
 import { TRUSTED_DATA_SOURCES, DataSource } from '@/lib/data-sources';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { api } from '@/lib/api';
 
 interface CreateProposalModalProps {
     isOpen: boolean;
@@ -12,9 +13,23 @@ interface CreateProposalModalProps {
     onLaunchSuccess?: () => void;
     activeAgentsCount: number;
     currentProposalsCount: number;
+    roundEndTime?: number;
+    roundDuration?: number;
+    isExecutingTrades?: boolean;
+    now?: number;
 }
 
-export const CreateProposalModal = ({ isOpen, onClose, onLaunchSuccess, activeAgentsCount, currentProposalsCount }: CreateProposalModalProps) => {
+export const CreateProposalModal = ({
+    isOpen,
+    onClose,
+    onLaunchSuccess,
+    activeAgentsCount,
+    currentProposalsCount,
+    roundEndTime,
+    roundDuration,
+    isExecutingTrades,
+    now
+}: CreateProposalModalProps) => {
     const [view, setView] = useState<'summary' | 'designer'>('summary');
     const [step, setStep] = useState(1);
 
@@ -55,13 +70,37 @@ export const CreateProposalModal = ({ isOpen, onClose, onLaunchSuccess, activeAg
         reset();
     };
 
-    const executeLaunch = () => {
+    const [executionPhase, setExecutionPhase] = useState<'initializing' | 'synthesizing' | 'starting' | 'executing'>('initializing');
+
+    const executeLaunch = async () => {
         setIsExecuting(true);
-        setTimeout(() => {
+        const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+        try {
+            // 1. Synthesize Agents if they don't exist
+            if (activeAgentsCount === 0) {
+                setExecutionPhase('synthesizing');
+                await Promise.all([api.initAgents(), wait(2000)]);
+            }
+
+            // 2. Transmitting the start request
+            setExecutionPhase('starting');
+
+            // Only proceed to 'executing' state if the API call succeeds
+            await api.startTradeLoop();
+
+            // Briefly show success state before closing
+            setExecutionPhase('executing');
             setExecutionComplete(true);
+
             onLaunchSuccess?.();
-            setTimeout(() => handleClose(), 1500);
-        }, 2200);
+            await wait(2000); // Allow user to see the "Round Active" checkmark
+            handleClose();
+        } catch (error) {
+            console.error("Failed to launch market:", error);
+            setIsExecuting(false);
+            setExecutionPhase('initializing');
+        }
     };
 
     return (
@@ -96,16 +135,28 @@ export const CreateProposalModal = ({ isOpen, onClose, onLaunchSuccess, activeAg
                                                 <Check className="w-6 h-6 text-emerald-500" strokeWidth={2} />
                                             </div>
                                             <div className="space-y-1">
-                                                <h3 className="text-lg font-bold text-white tracking-tight uppercase">Launch Confirmed</h3>
-                                                <p className="text-xs text-white/40">Market synchronized in evaluation pool.</p>
+                                                <h3 className="text-lg font-bold text-white tracking-tight uppercase">Round Active</h3>
+                                                <p className="text-xs text-white/40">Market is live and agents are trading.</p>
                                             </div>
                                         </motion.div>
                                     ) : (
                                         <div className="space-y-6">
                                             <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto" strokeWidth={1.5} />
                                             <div className="space-y-1.5">
-                                                <h3 className="text-sm font-bold text-white tracking-widest uppercase">Initializing Round</h3>
-                                                <p className="text-[9px] text-white/40 uppercase tracking-[0.2em]">Broadcasting directives...</p>
+                                                <h3 className="text-sm font-bold text-white tracking-widest uppercase">
+                                                    {executionPhase === 'synthesizing'
+                                                        ? 'Synthesizing Agents'
+                                                        : executionPhase === 'starting'
+                                                            ? 'Connecting to Market'
+                                                            : 'Initializing Round'}
+                                                </h3>
+                                                <p className="text-[9px] text-white/40 uppercase tracking-[0.2em]">
+                                                    {executionPhase === 'synthesizing'
+                                                        ? 'Generating specialized behaviors...'
+                                                        : executionPhase === 'starting'
+                                                            ? 'Synchronizing directives...'
+                                                            : 'Broadcasting signals...'}
+                                                </p>
                                             </div>
                                         </div>
                                     )}
@@ -134,8 +185,21 @@ export const CreateProposalModal = ({ isOpen, onClose, onLaunchSuccess, activeAg
                                         <p className="text-xl font-bold text-white tabular-nums">{currentProposalsCount}</p>
                                     </div>
                                     <div className="bg-white/[0.03] border border-white/5 rounded-xl p-6 flex flex-col items-center justify-center gap-2 group hover:border-white/10 transition-all">
-                                        <p className="text-[9px] font-black text-white/60 uppercase tracking-[0.15em] text-center">Round Time</p>
-                                        <p className="text-xl font-bold text-emerald-400 tabular-nums uppercase">25m</p>
+                                        <p className="text-[9px] font-black text-white/60 uppercase tracking-[0.15em] text-center">
+                                            {isExecutingTrades ? "Round Time" : "Round Duration"}
+                                        </p>
+                                        <p className="text-xl font-bold text-emerald-400 tabular-nums uppercase">
+                                            {isExecutingTrades && roundEndTime && now ? (() => {
+                                                const diff = Math.max(0, roundEndTime - now);
+                                                const m = Math.floor(diff / 60000);
+                                                const s = Math.floor((diff % 60000) / 1000);
+                                                return m > 0 ? `${m}m ${s}s` : `${s}s`;
+                                            })() : (roundDuration ? (() => {
+                                                const dm = Math.floor(roundDuration / 60000);
+                                                const ds = Math.floor((roundDuration % 60000) / 1000);
+                                                return dm > 0 ? `${dm}m ${ds}s` : `${ds}s`;
+                                            })() : '--')}
+                                        </p>
                                     </div>
                                 </div>
 
@@ -247,7 +311,7 @@ export const CreateProposalModal = ({ isOpen, onClose, onLaunchSuccess, activeAg
                                     </div>
                                 </div>
 
-                                <div className="p-12 pb-8 space-y-16 min-h-[440px]">
+                                <div className="p-6 sm:p-12 pb-8 space-y-8 sm:space-y-16 min-h-[400px] sm:min-h-[440px]">
                                     <AnimatePresence mode="wait">
                                         <motion.div
                                             key={step}
@@ -325,76 +389,81 @@ export const CreateProposalModal = ({ isOpen, onClose, onLaunchSuccess, activeAg
                                                                     </div>
                                                                 )}
 
-                                                                <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.02] border border-white/5 group-hover/row:border-white/10 transition-colors">
+                                                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5 group-hover/row:border-white/10 transition-colors relative">
                                                                     {/* Source Select */}
-                                                                    <Select
-                                                                        value={cond.source}
-                                                                        onValueChange={(value) => {
-                                                                            const updated = [...conditions];
-                                                                            updated[idx].source = value;
-                                                                            setConditions(updated);
-                                                                        }}
-                                                                    >
-                                                                        <SelectTrigger className="flex-1 bg-black/20 border-white/10 rounded-lg h-10 text-sm text-white font-medium focus:ring-0 focus:ring-offset-0">
-                                                                            <SelectValue placeholder="Select Source" />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent className="bg-[#0a0a0c] border-white/10">
-                                                                            {selectedSources.map(s => (
-                                                                                <SelectItem key={s.id} value={s.ticker} className="text-white hover:bg-white/5 focus:bg-white/5 cursor-pointer">
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <img src={s.icon} className="w-4 h-4 object-contain" alt={s.ticker} />
-                                                                                        <span>{s.ticker}</span>
-                                                                                    </div>
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
-
-                                                                    {/* Operator Select */}
-                                                                    <Select
-                                                                        value={cond.operator}
-                                                                        onValueChange={(value) => {
-                                                                            const updated = [...conditions];
-                                                                            updated[idx].operator = value;
-                                                                            setConditions(updated);
-                                                                        }}
-                                                                    >
-                                                                        <SelectTrigger className="w-[4.5rem] bg-black/20 border-white/10 rounded-lg h-10 text-sm font-mono text-emerald-400 font-bold justify-center focus:ring-0 focus:ring-offset-0 px-0">
-                                                                            <SelectValue />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent className="bg-[#0a0a0c] border-white/10 min-w-[4.5rem]">
-                                                                            {['>', '<', '>=', '<=', '==', '!='].map(op => (
-                                                                                <SelectItem key={op} value={op} className="text-emerald-400 font-mono hover:bg-white/5 focus:bg-white/5 cursor-pointer justify-center">
-                                                                                    {op}
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
-
-                                                                    {/* Value Input */}
-                                                                    <div className="relative">
-                                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-white/20 uppercase tracking-widest pointer-events-none">Val</span>
-                                                                        <input
-                                                                            type="number"
-                                                                            value={cond.value}
-                                                                            onChange={(e) => {
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <Select
+                                                                            value={cond.source}
+                                                                            onValueChange={(value) => {
                                                                                 const updated = [...conditions];
-                                                                                updated[idx].value = e.target.value;
+                                                                                updated[idx].source = value;
                                                                                 setConditions(updated);
                                                                             }}
-                                                                            className="w-24 bg-black/20 border border-white/10 rounded-lg h-10 pl-9 pr-3 text-sm font-mono text-white outline-none focus:border-white/20 transition-all placeholder:text-white/10"
-                                                                        />
+                                                                        >
+                                                                            <SelectTrigger className="w-full bg-black/20 border-white/10 rounded-lg h-11 text-sm text-white font-medium focus:ring-0 focus:ring-offset-0">
+                                                                                <SelectValue placeholder="Select Source" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent className="bg-[#0a0a0c] border-white/10">
+                                                                                {selectedSources.map(s => (
+                                                                                    <SelectItem key={s.id} value={s.ticker} className="text-white hover:bg-white/5 focus:bg-white/5 cursor-pointer">
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <img src={s.icon} className="w-4 h-4 object-contain" alt={s.ticker} />
+                                                                                            <span>{s.ticker}</span>
+                                                                                        </div>
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
                                                                     </div>
 
-                                                                    {/* Remove Row */}
-                                                                    {conditions.length > 1 && (
-                                                                        <button
-                                                                            onClick={() => setConditions(conditions.filter((_, i) => i !== idx))}
-                                                                            className="w-10 h-10 flex items-center justify-center rounded-lg bg-red-500/5 border border-red-500/10 text-red-500/40 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-all ml-1"
+                                                                    <div className="flex items-center gap-2">
+                                                                        {/* Operator Select */}
+                                                                        <Select
+                                                                            value={cond.operator}
+                                                                            onValueChange={(value) => {
+                                                                                const updated = [...conditions];
+                                                                                updated[idx].operator = value;
+                                                                                setConditions(updated);
+                                                                            }}
                                                                         >
-                                                                            <X className="w-4 h-4" />
-                                                                        </button>
-                                                                    )}
+                                                                            <SelectTrigger className="w-[4.5rem] bg-black/20 border-white/10 rounded-lg h-11 text-sm font-mono text-emerald-400 font-bold justify-center focus:ring-0 focus:ring-offset-0 px-0">
+                                                                                <SelectValue />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent className="bg-[#0a0a0c] border-white/10 min-w-[4.5rem]">
+                                                                                {['>', '<', '>=', '<=', '==', '!='].map(op => (
+                                                                                    <SelectItem key={op} value={op} className="text-emerald-400 font-mono hover:bg-white/5 focus:bg-white/5 cursor-pointer justify-center">
+                                                                                        {op}
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+
+                                                                        {/* Value Input */}
+                                                                        <div className="relative flex-1 sm:flex-none">
+                                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-white/20 uppercase tracking-widest pointer-events-none">Val</span>
+                                                                            <input
+                                                                                type="number"
+                                                                                value={cond.value}
+                                                                                onChange={(e) => {
+                                                                                    const updated = [...conditions];
+                                                                                    updated[idx].value = e.target.value;
+                                                                                    setConditions(updated);
+                                                                                }}
+                                                                                className="w-full sm:w-24 bg-black/20 border border-white/10 rounded-lg h-11 pl-9 pr-3 text-sm font-mono text-white outline-none focus:border-white/20 transition-all placeholder:text-white/10"
+                                                                                placeholder="0"
+                                                                            />
+                                                                        </div>
+
+                                                                        {/* Remove Row */}
+                                                                        {conditions.length > 1 && (
+                                                                            <button
+                                                                                onClick={() => setConditions(conditions.filter((_, i) => i !== idx))}
+                                                                                className="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg bg-red-500/5 border border-red-500/10 text-red-500/40 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-all"
+                                                                            >
+                                                                                <X className="w-4 h-4" />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -424,7 +493,7 @@ export const CreateProposalModal = ({ isOpen, onClose, onLaunchSuccess, activeAg
                                     </AnimatePresence>
                                 </div>
 
-                                <div className="p-12 pt-0 flex justify-between items-center mt-auto">
+                                <div className="p-6 sm:p-12 pt-0 flex justify-between items-center mt-auto">
                                     <button
                                         onClick={() => setStep(s => s > 1 ? s - 1 : 1)}
                                         disabled={step === 1}

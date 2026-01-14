@@ -7,7 +7,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { X, ChevronRight, Wallet, LogOut, Copy, Check } from "lucide-react";
 import { Logo } from "./Logo";
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { getVUSDCBalance, claimFaucet, quantumEVM } from '@/lib/blockchain';
+import { createWalletClient, custom } from 'viem';
+import { Loader2 } from 'lucide-react';
 
 interface NavbarProps {
     transparent?: boolean;
@@ -20,12 +23,28 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
     const pathname = usePathname();
     const isLandingPage = pathname === '/';
     const { login, logout, authenticated, user } = usePrivy();
+    const { wallets } = useWallets();
+    const [vusdcBalance, setVusdcBalance] = useState<string>('0.00');
+    const [claimingFaucet, setClaimingFaucet] = useState(false);
+
+    useEffect(() => {
+        if (!user?.wallet?.address) return;
+
+        const updateBalance = async () => {
+            const bal = await getVUSDCBalance(user.wallet!.address);
+            setVusdcBalance(bal);
+        };
+
+        updateBalance();
+        const interval = setInterval(updateBalance, 5000);
+        return () => clearInterval(interval);
+    }, [user?.wallet?.address]);
 
     const landingLinks = [
         { name: 'Vision', href: '#hero' },
         { name: 'Features', href: '#features' },
         { name: 'Performance', href: '#stats' },
-        { name: 'Docs', href: '#' }
+        { name: 'Docs', href: 'https://github.com/preyanshu/verdict' }
     ];
 
     const dashboardLinks = [
@@ -33,7 +52,7 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
         { name: 'Agents', href: '/dashboard/agents' },
         { name: 'Sources', href: '/dashboard/sources' },
         { name: 'History', href: '/dashboard/history' },
-        { name: 'Docs', href: '#' }
+        { name: 'Docs', href: 'https://github.com/preyanshu/verdict' }
     ];
 
     const currentLinks = isLandingPage ? landingLinks : dashboardLinks;
@@ -43,6 +62,36 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
             console.log("Full Privy User Object:", user);
         }
     }, [user]);
+
+    const handleClaimFaucet = async () => {
+        if (!wallets[0]) return;
+        setClaimingFaucet(true);
+        try {
+            // Ensure we are on the correct chain
+            if (wallets[0].chainId !== `eip155:${quantumEVM.id}`) {
+                try {
+                    await wallets[0].switchChain(quantumEVM.id);
+                } catch (switchError: any) {
+                    console.error('Chain switch failed:', switchError);
+                    // If switching fails, we still try to proceed as the provider might be manually set
+                }
+            }
+
+            const provider = await wallets[0].getEthereumProvider();
+            const walletClient = createWalletClient({
+                account: wallets[0].address as `0x${string}`,
+                chain: quantumEVM,
+                transport: custom(provider)
+            });
+            await claimFaucet(walletClient);
+            const bal = await getVUSDCBalance(user?.wallet?.address || wallets[0].address);
+            setVusdcBalance(bal);
+        } catch (error) {
+            console.error('Faucet claim failed:', error);
+        } finally {
+            setClaimingFaucet(false);
+        }
+    };
 
     const truncateAddress = (address: string) => {
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -78,6 +127,8 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                                 <Link
                                     key={item.name}
                                     href={item.href}
+                                    target={item.href.startsWith('http') ? '_blank' : undefined}
+                                    rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
                                     onMouseEnter={() => setHoveredIndex(i)}
                                     className={`relative px-4 xl:px-6 py-2 rounded-full text-sm font-medium transition-all group ${isActive ? 'text-white' : 'text-gray-400 hover:text-white'}`}
                                 >
@@ -168,7 +219,9 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                                             <div>
                                                 <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-4">Total Liquidity</p>
                                                 <div className="flex items-end justify-between">
-                                                    <span className="text-2xl font-black text-white font-mono tracking-tighter">$1,024.50</span>
+                                                    <span className="text-2xl font-black text-white font-mono tracking-tighter">
+                                                        ${Number(vusdcBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </span>
                                                     <span className="text-[11px] font-black text-emerald-400 uppercase tracking-widest mb-1">vUSD</span>
                                                 </div>
                                             </div>
@@ -206,13 +259,15 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                                             {/* Faucet Section */}
                                             <div className="pt-2">
                                                 <button
-                                                    onClick={() => {
-                                                        // Demo logic or just close for now
-                                                        console.log("Claimed 100 vUSD");
-                                                    }}
-                                                    className="w-full py-3 rounded-xl bg-emerald-500 text-black text-[10px] font-black uppercase tracking-[0.2em] hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                                                    onClick={handleClaimFaucet}
+                                                    disabled={claimingFaucet}
+                                                    className="w-full py-3 rounded-xl bg-emerald-500 text-black text-[10px] font-black uppercase tracking-[0.2em] hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.2)] disabled:opacity-50"
                                                 >
-                                                    Get Demo vUSD (100)
+                                                    {claimingFaucet ? (
+                                                        <><Loader2 className="w-3 h-3 animate-spin" /> Processing...</>
+                                                    ) : (
+                                                        "Get Demo vUSD (100)"
+                                                    )}
                                                 </button>
                                             </div>
 
@@ -311,6 +366,8 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                                 <Link
                                     key={item.name}
                                     href={item.href}
+                                    target={item.href.startsWith('http') ? '_blank' : undefined}
+                                    rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
                                     className={`flex items-center justify-between text-lg font-medium px-4 py-3 rounded-xl transition-all ${isActive ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                                     onClick={() => setIsOpen(false)}
                                 >
@@ -358,7 +415,7 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="bg-[#0a0a0c] border border-white/10 rounded-[2.5rem] p-8 w-full max-w-sm relative z-[210] shadow-2xl shadow-emerald-500/5"
+                            className="bg-[#0a0a0c] border border-white/10 rounded-3xl p-8 w-full max-w-sm relative z-[210] shadow-2xl shadow-emerald-500/5"
                         >
                             {/* Close Button */}
                             <button
@@ -373,7 +430,9 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                                 <div className="space-y-4">
                                     <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.25em]">Total Liquidity</p>
                                     <div className="flex items-baseline justify-between">
-                                        <span className="text-4xl font-black text-white font-mono tracking-tighter leading-none">$1,024.50</span>
+                                        <span className="text-4xl font-black text-white font-mono tracking-tighter leading-none">
+                                            ${Number(vusdcBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
                                         <span className="text-[11px] font-black text-emerald-500 uppercase tracking-widest">vUSD</span>
                                     </div>
                                     <div className="h-px bg-white/5 w-full mt-4" />
@@ -394,7 +453,7 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
 
                                     {/* Name & Email Block */}
                                     {(user?.google?.name || user?.google?.email) && (
-                                        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl space-y-1">
+                                        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-1">
                                             {user?.google?.name && (
                                                 <p className="text-sm font-bold text-white tracking-tight">{user.google.name}</p>
                                             )}
@@ -405,7 +464,7 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                                     )}
 
                                     {/* Network & Address Container */}
-                                    <div className="p-5 bg-black/40 border border-white/5 rounded-2xl space-y-4">
+                                    <div className="p-5 bg-black/40 border border-white/5 rounded-xl space-y-4">
                                         <div className="flex items-center justify-between">
                                             <span className="text-[10px] text-white/30 font-bold uppercase tracking-widest">Network</span>
                                             <div className="flex items-center gap-1.5">
@@ -431,19 +490,22 @@ export const Navbar = ({ transparent = true }: NavbarProps) => {
                                 {/* Faucet Section */}
                                 <div>
                                     <button
-                                        onClick={() => {
-                                            console.log("Claimed 100 vUSD");
-                                        }}
-                                        className="w-full py-4 rounded-2xl bg-emerald-500 text-black text-[11px] font-black uppercase tracking-[0.25em] hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(16,185,129,0.2)] active:scale-95"
+                                        onClick={handleClaimFaucet}
+                                        disabled={claimingFaucet}
+                                        className="w-full py-4 rounded-xl bg-emerald-500 text-black text-[11px] font-black uppercase tracking-[0.25em] hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(16,185,129,0.2)] active:scale-95 disabled:opacity-50"
                                     >
-                                        Get Demo vUSD (100)
+                                        {claimingFaucet ? (
+                                            <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+                                        ) : (
+                                            "Get Demo vUSD (100)"
+                                        )}
                                     </button>
                                 </div>
 
                                 {/* Terminate Session */}
                                 <button
                                     onClick={() => logout()}
-                                    className="w-full py-4 rounded-2xl bg-red-500/5 border border-red-500/10 text-red-500 text-[11px] font-black uppercase tracking-[0.25em] hover:bg-red-500/10 transition-all flex items-center justify-center gap-3 active:scale-95 group"
+                                    className="w-full py-4 rounded-xl bg-red-500/5 border border-red-500/10 text-red-500 text-[11px] font-black uppercase tracking-[0.25em] hover:bg-red-500/10 transition-all flex items-center justify-center gap-3 active:scale-95 group"
                                 >
                                     <LogOut className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
                                     Terminate Session

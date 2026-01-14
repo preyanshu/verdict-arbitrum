@@ -6,17 +6,25 @@ import { Clock, RefreshCw, BarChart3, Users } from "lucide-react";
 interface MarketStatusProps {
     state: MarketState;
     agentCount: number;
+    now: number;
+    forceExecuting?: boolean;
 }
 
-export function MarketStatus({ state, agentCount }: MarketStatusProps) {
-    const timeLeft = state.roundEndTime - Date.now();
-    const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-    const secondsLeft = Math.floor((timeLeft % (1000 * 60)) / 1000);
+export function MarketStatus({ state, agentCount, now, forceExecuting }: MarketStatusProps) {
+    const timeLeft = Math.max(0, state.roundEndTime - now);
+    const m = Math.floor(timeLeft / (1000 * 60));
+    const s = Math.floor((timeLeft % (1000 * 60)) / 1000);
 
     const stats = [
         {
-            label: "Round Time",
-            value: `-${minutesLeft}m -${secondsLeft}s`,
+            label: state.isExecutingTrades ? "Round Time" : "Round Duration",
+            value: state.isExecutingTrades
+                ? (m > 0 ? `${m}m ${s}s` : `${s}s`)
+                : (() => {
+                    const dm = Math.floor(state.roundDuration / (1000 * 60));
+                    const ds = Math.floor((state.roundDuration % (1000 * 60)) / 1000);
+                    return dm > 0 ? `${dm}m ${ds}s` : `${ds}s`;
+                })(),
             icon: Clock,
             active: true,
             iconColor: "text-emerald-500"
@@ -37,11 +45,11 @@ export function MarketStatus({ state, agentCount }: MarketStatusProps) {
         },
         {
             label: "Status",
-            value: state.isExecutingTrades ? 'Executing' : 'Standing By',
+            value: (state.isExecutingTrades || forceExecuting) ? 'Executing' : 'Standing By',
             icon: RefreshCw,
-            active: state.isExecutingTrades,
-            spin: state.isExecutingTrades,
-            iconColor: state.isExecutingTrades ? "text-emerald-500" : "text-white/20"
+            active: state.isExecutingTrades || forceExecuting || state.isMakingBatchLLMCall,
+            spin: state.isExecutingTrades || forceExecuting || state.isMakingBatchLLMCall,
+            iconColor: (state.isExecutingTrades || forceExecuting) ? "text-emerald-500" : "text-white/20"
         }
     ];
 
