@@ -1,10 +1,10 @@
 # Verdict
 
-**Verdict** implements a capital-efficient prediction market for **Real-World (RW) strategies**—enabling traders to deploy full capital across multiple proposals simultaneously through virtual token mechanics. **AI agents propose themselves** with various personalities and trading strategies based on real-world data sources (commodities, ETFs, FX rates). Both AI agents and **humans can trade** in the pools, and market forces determine which proposals graduate.
+**Verdict** is a capital-efficient prediction market for **Real-World (RW) strategies** that enables traders to deploy full capital across multiple proposals simultaneously through virtual token mechanics. **AI agents propose themselves** with various personalities and trading strategies based on real-world data sources. Both AI agents and **humans can trade** in the pools, and market forces determine which proposals graduate.
 
 ## The Problem
 
-Traditional prediction markets fragment liquidity across proposals. If you have $1M and 20 proposals, you can only allocate ~$50K per proposal. **Verdict solves this** through a "wave function collapse" mechanism where:
+Traditional prediction markets fragment liquidity across proposals. If you have $1M and 20 proposals, you can only allocate ~$50K per proposal. **Verdict solves this** through a "wave function collapse" mechanism:
 
 - Traders deposit once and receive virtual trading credits (vUSD) for all proposals
 - Each proposal creates YES/NO token pairs tradeable against vUSD
@@ -16,25 +16,22 @@ Traditional prediction markets fragment liquidity across proposals. If you have 
 ### Proposal Phase
 
 **AI Agent Proposals**: AI agents propose themselves as strategy candidates with:
-- **Unique Personalities**: Each agent has distinct traits, risk tolerance (low/medium/high), and aggressiveness levels
-- **Trading Strategies**: Agents define their approach (bullish, bearish, momentum, mean-reversion)
-- **Real-World Data Sources**: Proposals built on 20+ trusted data sources including:
+
+- **Unique Personalities**: Distinct traits, risk tolerance (low/medium/high), and aggressiveness levels
+- **Trading Strategies**: Bullish, bearish, momentum, mean-reversion approaches
+- **Real-World Data Sources**: 20+ trusted sources including:
   - **Commodities**: Natural Gas (NG), Crude Oil (WTI), Brent Oil (XBR)
   - **ETFs**: SPY, QQQ, VTI, Bitcoin ETFs (IBIT, GBTC, FBTC), Treasury Bonds (TLT, SHY)
   - **FX Rates**: CAD, AUD, CNY
 
-Each proposal includes:
-- Strategy name and description
-- Evaluation logic (e.g., "SPY > 700")
-- Mathematical logic with data source conditions
-- Target values and operators (>, <, =)
-- Resolution deadline
+Each proposal includes strategy name, description, evaluation logic, mathematical logic with data source conditions, target values, operators (>, <, =), and resolution deadline.
 
-**Human Proposals**: Users can also inject custom proposals via the frontend designer before market launch.
+**Human Proposals**: Users can inject custom proposals via the `/api/proposal/inject` endpoint before market launch.
 
 ### Market Creation
 
 Prediction markets launch with:
+
 - **Fixed duration**: Configurable round duration (default: 10 minutes)
 - **Base token**: vUSD (virtual USD) as trading credits
 - **YES/NO tokens**: Created per proposal via 1:1:1 minting ratio
@@ -43,19 +40,19 @@ Prediction markets launch with:
 ### Trading Phase
 
 **AI Agent Trading**: AI agents automatically trade based on:
+
 - Real-world data source prices and trends
 - Their unique personality traits and risk tolerance
 - Trading strategies (bullish thresholds, confidence weights, action bias)
 - Market conditions and proposal evaluations
 
-**Human Trading**: Users can also trade directly in the pools:
+**Human Trading**: Users can trade directly in the pools:
+
 - Connect wallet (Privy integration)
 - Swap vUSD for YES/NO tokens via AMM
 - View real-time quotes and execute trades
 - Monitor positions and trading history
 - All trades are on-chain with transaction hashes
-
-Both AI agents and humans compete in the same pools, creating a dynamic market where algorithmic and human intelligence converge.
 
 ### Price Discovery via TWAP
 
@@ -64,26 +61,20 @@ Both AI agents and humans compete in the same pools, creating a dynamic market w
 - Highest sustained YES price determines winner
 - Market graduation when round deadline passes
 
-### Custom Proposal Injection
-
-Users can inject custom strategies before market launch:
-1. Select real-world data sources
-2. Define activation conditions (e.g., "SPY > 700 AND QQQ > 600")
-3. Set target values and operators
-4. Inject into market before trading begins
-
 ## Technical Architecture
 
 ### Core Contracts
 
 **VerdictPredictionMarketRouter.sol**: Main contract managing:
+
 - Proposal creation and registration
 - YES/NO token deployment
-- AMM pool creation (via Balancer/Uniswap v4 hooks)
+- AMM pool creation
 - TWAP calculations and market graduation
 - Virtual token minting (vUSD → YES + NO)
 
 **Key Functions**:
+
 ```solidity
 function createProposal(
     string memory proposalId,
@@ -105,6 +96,7 @@ function graduateProposal(
 ```
 
 **Virtual Token Minting**:
+
 ```solidity
 // 1 vUSD → 1 YES + 1 NO (1:1:1 ratio)
 function mintDecisionTokens(uint256 proposalId, uint256 amount) {
@@ -115,6 +107,7 @@ function mintDecisionTokens(uint256 proposalId, uint256 amount) {
 ```
 
 **TWAP-Based Winner Selection**:
+
 ```solidity
 function graduateProposal(string memory proposalId, uint256 finalPrice) {
     // Proposal with highest YES TWAP wins
@@ -123,38 +116,39 @@ function graduateProposal(string memory proposalId, uint256 finalPrice) {
 }
 ```
 
-### Backend Architecture (Node.js/TypeScript)
+### Backend Architecture (Bun + TypeScript)
 
 **Core Components**:
-- **API Server**: FastAPI-style REST API with WebSocket support
-- **Market State Management**: Tracks proposals, agents, and trading rounds
-- **Agent Proposal Generation**: AI agents propose themselves with:
-  - Unique personalities (names, traits, memos)
-  - Risk tolerance levels (low/medium/high)
-  - Aggressiveness scores (0-1 scale)
-  - Trading strategies and biases
-- **Agent Trading Logic**: AI agents trade based on:
-  - Real-world data source prices and trends
-  - Their personality traits and risk tolerance
-  - Aggressiveness and trading biases
-  - Market conditions and proposal evaluations
+
+- **API Server**: Bun.serve() HTTP server with REST API endpoints
+- **Market State Management**: In-memory state tracking proposals, agents, and trading rounds
+- **Agent Proposal Generation**: LLM-powered agents propose themselves with unique personalities, risk tolerance, and trading strategies
+- **Agent Trading Logic**: AI agents trade based on real-world data, personality traits, and market conditions
+- **Blockchain Integration**: Ethers.js for contract interactions, transaction signing, and on-chain data synchronization
 
 **API Endpoints**:
+
 - `GET /api/market` - Market state with proposals and round info
-- `GET /api/agents` - Active trading agents
-- `POST /api/proposal/inject` - Inject custom proposal
+- `GET /api/agents` - Active trading agents with balances and trade history
+- `POST /api/proposal/inject` - Inject custom proposal (requires existing AI proposals)
+- `POST /api/init/proposals` - Generate AI proposals via LLM
+- `POST /api/init/agents` - Initialize AI agents with personalities
 - `POST /api/trade/start` - Start trading round
 - `GET /api/history` - Graduated proposals
+- `GET /api/logs` - System execution logs
+- `GET /api/data-sources` - Available data sources
 
 **Agent Personalities**:
+
 - AI agents propose themselves with unique traits, risk tolerance, and trading strategies
 - Each agent has distinct personality (name, memo, traits) that influences trading behavior
 - Agents analyze real-world data and make buy/sell decisions based on their personality
 - Trading activity tracked with reasoning and transaction hashes
 
-### Frontend (Next.js + TypeScript)
+### Frontend (Vanilla JavaScript + HTML)
 
 **Real-time Features**:
+
 - Live market prices and TWAP calculations
 - Trading activity feed with agent actions
 - Proposal rankings and sentiment analysis
@@ -162,11 +156,12 @@ function graduateProposal(string memory proposalId, uint256 finalPrice) {
 - Custom proposal designer
 
 **Key Components**:
+
 - **Market Dashboard**: View all active proposals with YES/NO prices
 - **Market Detail View**: Detailed proposal view with charts and swap interface
 - **Agent Monitor**: Track AI agent trading activity and balances
 - **Activity Feed**: Real-time trade history with explorer links
-- **Custom Proposal Modal**: 3-step designer for injecting strategies
+- **Custom Proposal Modal**: Designer for injecting strategies
 
 ## Key Innovations
 
@@ -181,6 +176,7 @@ Time-Weighted Average Price ensures sustained market belief, not last-second man
 ### Real-World Data Integration
 
 20+ trusted data sources via DIA Data API:
+
 - Commodities (Natural Gas, Oil)
 - ETFs (SPY, QQQ, Bitcoin ETFs)
 - FX Rates (CAD, AUD, CNY)
@@ -189,12 +185,14 @@ Time-Weighted Average Price ensures sustained market belief, not last-second man
 ### AI-Native Design with Human Participation
 
 System designed for AI agents to:
+
 - **Propose themselves** with various personalities and trading strategies
 - Trade automatically based on external data signals and personality traits
 - Compete in pools alongside human traders
 - Launch strategies upon market validation
 
 **Human traders** can:
+
 - Inject custom proposals before market launch
 - Trade directly in pools via wallet connection
 - Compete with AI agents using their own strategies
@@ -203,10 +201,64 @@ System designed for AI agents to:
 ### Rapid Iteration Cycles
 
 Configurable round durations allow for:
+
 - Quick experimentation with different proposals
 - Fast feedback on market preferences
 - Continuous improvement of strategies
 - High-velocity strategy discovery
+
+## Setup
+
+### Prerequisites
+
+- [Bun](https://bun.sh) runtime
+- Node.js 18+ (for Hardhat contract deployment)
+- Wallet with testnet tokens (Mantle Sepolia, Arbitrum Sepolia, or Hardhat local)
+
+### Installation
+
+```bash
+bun install
+```
+
+### Configuration
+
+Create a `.env` file:
+
+```bash
+# Environment
+APP_ENV=prod
+
+# Groq API (for LLM)
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.3-70b-versatile
+
+
+RPC_URL=https://sepolia-rollup.arbitrum.io/rpc
+CHAIN_ID=421614
+ROUTER_ADDRESS=0x7C2b85130e5c2A51058773e7932245DF9b4A4D34
+BACKEND_PRIVATE_KEY=your_backend_wallet_private_key
+BLOCK_EXPLORER_URL=https://sepolia.arbiscan.io/
+```
+
+### Running
+
+```bash
+# Start backend server
+bun run index.ts
+
+# Deploy contracts (in contracts-hardhat/)
+cd contracts-hardhat
+bunx hardhat run scripts/deploy.js --network arbitrumSepolia
+```
+
+## Supported Networks
+
+- **Mantle Sepolia** (Testnet) - Chain ID: 5003
+- **Arbitrum Sepolia** (Testnet) - Chain ID: 421614
+- **Hardhat Local** - Chain ID: 31337
+
+See [docs/multi-chain-setup.md](docs/multi-chain-setup.md) for detailed network configuration.
 
 ## Future Improvements
 
