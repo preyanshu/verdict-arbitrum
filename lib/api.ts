@@ -1,5 +1,6 @@
 import { MarketState, MarketStrategy, Agent, LogEntry, CustomProposal, InjectedProposalResponse } from "./types";
 import { API_CONFIG } from "./config";
+import { validateAndFixStrategies } from "./strategy-fallback";
 
 const BASE_URL = API_CONFIG.baseUrl;
 
@@ -8,13 +9,20 @@ export const api = {
     async getMarketState(): Promise<MarketState> {
         const response = await fetch(`${BASE_URL}/api/market`);
         if (!response.ok) throw new Error("Failed to fetch market state");
-        return response.json();
+        const state = await response.json();
+        // Validate and fix strategies with fallback data sources
+        if (state.strategies) {
+            state.strategies = validateAndFixStrategies(state.strategies);
+        }
+        return state;
     },
 
     async getGraduatedStrategies(): Promise<MarketStrategy[]> {
         const response = await fetch(`${BASE_URL}/api/history`);
         if (!response.ok) throw new Error("Failed to fetch history");
-        return response.json();
+        const strategies = await response.json();
+        // Validate and fix strategies with fallback data sources
+        return validateAndFixStrategies(strategies);
     },
 
     // Agent Data
