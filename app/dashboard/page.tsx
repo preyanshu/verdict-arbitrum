@@ -307,6 +307,18 @@ export default function DashboardPage() {
                                     <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-500/60 ml-2">
                                         Synchronizing
                                     </span>
+                                    <p className="text-[9px] text-white/30 font-medium mt-2 max-w-sm text-center px-4">
+                                        <span className="text-emerald-500/70">Demo:</span> Backend on free cloud. 
+                                        Initial request may take time due to server boot up.
+                                    </p>
+                                    <a 
+                                        href="https://youtu.be/tWkDE01Nmeo" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-[9px] text-emerald-400/80 hover:text-emerald-400 font-medium mt-1 underline transition-colors"
+                                    >
+                                        Watch Demo Video →
+                                    </a>
                                 </div>
                             </motion.div>
                         ) : selectedStrategy ? (

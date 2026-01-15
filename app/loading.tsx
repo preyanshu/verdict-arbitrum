@@ -31,6 +31,18 @@ export default function Loading() {
                     <h2 className="text-xl font-black text-white uppercase tracking-tighter">
                         Verdicts Protocol
                     </h2>
+                    <p className="text-xs text-white/40 font-medium mt-4 max-w-md text-center px-4">
+                        <span className="text-emerald-500/80">Demo Mode:</span> Backend server is on a free cloud service. 
+                        Initial request may take time due to server boot up.
+                    </p>
+                    <a 
+                        href="https://youtu.be/tWkDE01Nmeo" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-emerald-400/80 hover:text-emerald-400 font-medium mt-2 underline transition-colors"
+                    >
+                        Watch Demo Video →
+                    </a>
                 </motion.div>
             </div>
         </div>
