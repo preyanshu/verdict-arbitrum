@@ -12,7 +12,7 @@
 // Change this to switch the entire app between networks:
 // Options: 'mantle-sepolia' | 'arbitrum-sepolia'
 
-export const ACTIVE_NETWORK: 'mantle-sepolia' | 'arbitrum-sepolia' = 'mantle-sepolia';
+export const ACTIVE_NETWORK: 'mantle-sepolia' | 'arbitrum-sepolia' = 'arbitrum-sepolia';
 
 // =============================================================================
 // NETWORK DEFINITIONS
